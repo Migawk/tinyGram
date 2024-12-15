@@ -1,0 +1,16 @@
+{
+  "name": "tinygram",
+  "version": "0.0.1",
+  "description": "A tiny library for telegram. Written in TypeScript. Contains a very needed types and very helpful functional.",
+  "main": "index.ts",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "telegram",
+    "typescript",
+    "tiny"
+  ],
+  "author": "Migawka",
+  "license": "MIT"
+}
