@@ -16,8 +16,6 @@ interface IBotConfig {
  * * ready - shoots when bots been started
  * * message - shoots when message is been recieved
  * * callback - shoots when callback is benn executed
- * @property token
- * @property bot contains info abot the bot, thats been recieved from `getMe`.
  */
 export default class TelegramBot extends EventEmitter {
   token: string;
@@ -561,7 +559,6 @@ export default class TelegramBot extends EventEmitter {
 /**
  * Generates InlineKeyboard that used for Telegram.
  * **The keybord-object is in res property.**
- * @class
  */
 export class InlineKeyboardGenerator {
   res: TelegramButton[][] = [[]];

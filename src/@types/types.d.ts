@@ -14,7 +14,7 @@ type Chat =
   | {
       id: number;
       type: "group" | "supergroup" | "channel";
-      title: stirng;
+      title: string;
       is_forum: boolean;
     }
   | {
