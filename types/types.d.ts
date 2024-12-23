@@ -107,18 +107,18 @@ type User = {
 };
 type Chat =
   | {
-      id: number;
-      type: "group" | "supergroup" | "channel";
-      title: string;
-      is_forum: boolean;
-    }
+    id: number;
+    type: "group" | "supergroup" | "channel";
+    title: string;
+    is_forum: boolean;
+  }
   | {
-      id: number;
-      type: "private";
-      first_name?: string;
-      last_name?: string;
-      username?: string;
-    };
+    id: number;
+    type: "private";
+    first_name?: string;
+    last_name?: string;
+    username?: string;
+  };
 type TelegramMessage = {
   message_id: number;
 
@@ -224,12 +224,12 @@ interface Document {
   file_name?: string;
   file_size?: string;
   mime_type?:
-    | "image/jpeg"
-    | "image/png"
-    | "image/gif"
-    | "image/bmp"
-    | "image/webp"
-    | string;
+  | "image/jpeg"
+  | "image/png"
+  | "image/gif"
+  | "image/bmp"
+  | "image/webp"
+  | string;
 
   thumbnail?: PhotoSize;
 }
@@ -294,25 +294,25 @@ type TelegramResponseUpdate = TelegramResponse & {
   data: {
     result: (
       | {
-          update_id: number;
-          message?: TelegramMessage;
-        }
+        update_id: number;
+        message?: TelegramMessage;
+      }
       | {
-          update_id: number;
-          callback_query: CallbackQuery;
-        }
+        update_id: number;
+        callback_query: CallbackQuery;
+      }
     )[];
   };
 };
 type TelegramUpdate =
   | {
-      type: "message";
-      message: BotMessage;
-    }
+    type: "message";
+    message: BotMessage;
+  }
   | {
-      type: "callback_query";
-      callback_query: CallbackQuery;
-    };
+    type: "callback_query";
+    callback_query: CallbackQuery;
+  };
 type methods =
   | "getMe"
   | "getUpdates"
@@ -339,13 +339,13 @@ type methodsPost =
   | "sendDocument";
 type TelegramEntitiy = {
   type:
-    | "mention"
-    | "hashtag"
-    | "cashtag"
-    | "bot_command"
-    | "url"
-    | "email"
-    | "phone_number";
+  | "mention"
+  | "hashtag"
+  | "cashtag"
+  | "bot_command"
+  | "url"
+  | "email"
+  | "phone_number";
   offset: number;
   length: number;
 };
@@ -361,8 +361,7 @@ interface InputSticker {
   emoji_list: string[];
 }
 
-interface BotMessage {
-  message: BotTelegramMessage;
+type BotMessage = BotTelegramMessage & {
   reply: (text: string, rest?: TelegramSendMessage) => BotMessage;
 }
 interface BotUser {

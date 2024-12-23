@@ -16,16 +16,23 @@ interface IBotConfig {
  * * ready - shoots when bots been started
  * * message - shoots when message is been recieved
  * * callback - shoots when callback is benn executed
+ * @property token
+ * @property bot contains info abot the bot, thats been recieved from `getMe`.
  */
 export default class TelegramBot extends EventEmitter {
-  token: string;
+  private token: string;
+  private isStream: boolean;
+  private lastUpdateCheck: number = 0;
+
+  frequency: number;
+  initFrequency: number;
+
   bot: {
     id: string;
     is_bot: boolean;
     username: string;
     can_join_groups: boolean;
   };
-  private lastUpdateCheck: number = 0;
 
   /**
    * @param settings Must contain at least token. Optional: frequency(how often getting updates from the server), isStream - true by default. If you just want create object and dont send request to `getUpdates`, just toggle it to `false`.
@@ -33,39 +40,11 @@ export default class TelegramBot extends EventEmitter {
   constructor({ token, frequency, isStream = true }: IBotConfig) {
     super();
     this.token = token;
+    this.isStream = isStream;
+    this.frequency = frequency;
+    this.initFrequency = frequency;
 
-    if (isStream)
-      setInterval(async () => {
-        const result = await this.getUpdate(true);
-        if (!result) return;
-
-        if (result.type === "message") {
-          const msg = result.message;
-
-          if (
-            msg.message.entities &&
-            msg.message.entities.findIndex(
-              (ent) => ent.type === "bot_command"
-            ) !== -1
-          ) {
-            const lMsg = msg.message.text.split(" ");
-            const extension = { cmd: lMsg[0].slice(1), args: lMsg.slice(1) };
-            this.emit("command", { ...msg, ...extension });
-          } else {
-            this.emit("update", msg);
-          }
-        } else if (result.type === "callback_query") {
-          let args: string[] = [];
-
-          if (result.callback_query.data.indexOf("_") !== -1) {
-            args = result.callback_query.data.split("_");
-
-            args.shift();
-          }
-
-          this.emit("callback", { ...result.callback_query, args });
-        }
-      }, frequency ?? 5000);
+    if (isStream) this.check();
 
     async function update() {
       const res = await this.getMe();
@@ -74,11 +53,43 @@ export default class TelegramBot extends EventEmitter {
         return setTimeout(update, 5000);
       }
 
-      this.bot = res.data;
-      this.emit("ready", res.data);
+      this.bot = res.result;
+      this.emit("ready", res.result);
     }
 
     update.call(this);
+  }
+  async check() {
+    const result = await this.getUpdate(true);
+    if (result) {
+      if (result.type === "message") {
+        const msg = this.messageFabric(result);
+
+        if (
+          msg.entities &&
+          msg.entities.findIndex((ent) => ent.type === "bot_command") !== -1
+        ) {
+          const lMsg = msg.text.split(" ");
+          const extension = { cmd: lMsg[0].slice(1), args: lMsg.slice(1) };
+          this.emit("command", { ...msg, ...extension });
+        } else {
+          this.emit("update", msg);
+        }
+      } else if (result.type === "callback_query") {
+        let args: string[] = [];
+
+        if (result.callback_query.data.indexOf("_") !== -1) {
+          args = result.callback_query.data.split("_");
+
+          args.shift();
+        }
+
+        this.emit("callback", { ...result.callback_query, args });
+      }
+    }
+
+    if (this.isStream)
+      setTimeout(() => this.check.call(this), this.frequency ?? 5000);
   }
 
   /**
@@ -91,39 +102,37 @@ export default class TelegramBot extends EventEmitter {
    *
    * @param offset send with offset?(Just makes one more request that removes the last message from the telegram server)
    */
-  async getUpdate(offset: boolean = false): Promise<TelegramUpdate | null> {
-    const response = (await this.request("getUpdates")) as {
-      data: TelegramGetUpdatesResponse;
-      err: boolean;
-    };
+  async getUpdate(offset: boolean = false) {
+    const response = await this.request<TelegramGetUpdatesResponse>(
+      "getUpdates"
+    );
 
-    if (response.err) return;
+    if (!response || !response.ok) return;
 
-    if (offset && response.data.length > 0)
+    if (offset && response.result.length > 0)
       this.request("getUpdates", {
-        offset: response.data[0].update_id + 1,
+        offset: response.result[0].update_id + 1,
       });
 
-    const lastUpdate = response.data[0];
+    const lastUpdate = response.result[0];
     if (!lastUpdate || lastUpdate.update_id === this.lastUpdateCheck)
       return null;
 
     this.lastUpdateCheck = lastUpdate.update_id;
 
     if ("message" in lastUpdate) {
-      return {
+      const res = {
         type: "message",
-        message: this.messageFabric(lastUpdate.message),
+        ...(this.messageFabric(lastUpdate.message) as {
+          message: BotTelegramMessage;
+          reply: () => {};
+        } & any),
       };
+      return res;
     } else if ("callback_query" in lastUpdate) {
       const { callback_query } = lastUpdate;
-      callback_query.from = this.authorFabric(
-        callback_query.from,
-        callback_query.message
-      );
-      callback_query.message = this.messageFabric(
-        callback_query.message
-      ).message;
+      callback_query.from = this.authorFabric(callback_query.from);
+      callback_query.message = this.messageFabric(callback_query.message);
 
       return { type: "callback_query", callback_query };
     }
@@ -156,14 +165,7 @@ export default class TelegramBot extends EventEmitter {
     if (body.message_effect_id)
       body.message_effect_id = msgEffectId[body.message_effect_id] as any;
 
-    const res = (await this.request("sendMessage", body)) as {
-      data: TelegramMessage;
-      err: boolean;
-    };
-    if (!res.err) return res.data as TelegramMessage; // TODO: prepare msg using msgFabric;
-    console.log(res);
-
-    return null;
+    return this.request<TelegramMessage>("sendMessage", body);
   }
   async sendPhoto(
     chatId: number | string,
@@ -179,17 +181,15 @@ export default class TelegramBot extends EventEmitter {
       ...rest,
     };
 
-    let res: { data: TelegramMessage; err: boolean };
+    let res: TelegramResponse<TelegramMessage>;
     if (photo instanceof Buffer) {
-      res = await this.requestPost("sendPhoto", {
+      res = await this.requestPost<TelegramMessage>("sendPhoto", {
         ...body,
         photo: new Blob([body.photo]),
       });
     } else {
-      res = await this.request("sendPhoto", body);
+      res = await this.request<TelegramMessage>("sendPhoto", body);
     }
-
-    if (!res.err) return res.data;
 
     return res;
   }
@@ -208,7 +208,7 @@ export default class TelegramBot extends EventEmitter {
     };
     if (caption) body.caption = caption;
 
-    let res: { data: TelegramMessage; err: boolean };
+    let res: Awaited<TelegramResponse<TelegramMessage>>;
     if (document instanceof Buffer) {
       res = await this.requestPost("sendDocument", {
         ...body,
@@ -220,33 +220,20 @@ export default class TelegramBot extends EventEmitter {
       res = await this.request("sendDocument", body);
     }
 
-    if (!res.err) return res.data;
-
-    return null;
+    return res;
   }
   async sendSticker(chatId: number | string, sticker: string | InputSticker) {
-    const res = (await this.request("sendSticker", {
+    return this.request<TelegramMessage>("sendSticker", {
       chat_id: chatId,
       sticker,
-    })) as { data: TelegramMessage; err: boolean };
-
-    if (!res.err) return res.data;
-
-    return null;
+    });
   }
   /**
    * Just request file. Usually is used in couple with `downloadFile`.
    * @param file_id string
    */
   async getFile(file_id: string) {
-    const res = (await this.request("getFile", { file_id })) as {
-      data: TelegramFile;
-      err: boolean;
-    };
-
-    if (!res.err) return res.data;
-
-    return null;
+    return this.request<TelegramFile>("getFile", { file_id });
   }
   async downloadFile(path: string, fileOut: string) {
     const res = await axios.get(
@@ -287,60 +274,38 @@ export default class TelegramBot extends EventEmitter {
       ...options,
     };
 
-    const res = (await this.request("editMessageText", body)) as {
-      data: TelegramMessage;
-      err: boolean;
-    };
-    if (!res.err) return res.data;
-
-    console.log(res);
-
-    return null;
+    return this.request<TelegramMessage>("editMessageText", body);
   }
   async editMessageCaption(
     caption: string,
     messageId?: number,
     chatId?: number
   ) {
-    const res = (await this.request("editMessageCaption", {
+    return this.request<TelegramMessage>("editMessageCaption", {
       caption,
       message_id: messageId,
       chat_id: chatId,
-    })) as { data: TelegramMessage; err: boolean };
-
-    if (!res.err) return res.data;
-
-    return null;
+    });
   }
   async editMessageReplyMarkup(
     messageId?: number,
     chatId?: number,
     replyMarkup?: ReplyMarkup
   ) {
-    const res = (await this.request("editMessageReplyMarkup", {
+    return this.request("editMessageReplyMarkup", {
       message_id: messageId,
       chat_id: chatId,
       reply_markup: replyMarkup,
-    })) as { data: TelegramMessage; err: boolean };
-    if (!res.err) return res.data;
+    });
   }
   async deleteMessage(chatId: number, messageId: number) {
-    const res = (await this.request("deleteMessage", {
+    return this.request<boolean>("deleteMessage", {
       chat_id: chatId,
       message_id: messageId,
-    })) as { data: boolean; err: boolean };
-
-    if (!res.err) return res.data;
-    return null;
+    });
   }
   async getStickerSet(name: string) {
-    const res = (await this.request("getStickerSet", { name })) as {
-      data: TelegramStickerSet;
-      err: boolean;
-    };
-    if (!res.err) return res.data;
-
-    return null;
+    return this.request<TelegramStickerSet>("getStickerSet", { name });
   }
   async createNewStickerSet({
     userId,
@@ -349,58 +314,45 @@ export default class TelegramBot extends EventEmitter {
     stickers,
     sticker_type = "regular",
   }: ICreateNewStickerSet) {
-    const res = (await this.requestPost("createNewStickerSet", {
+    return this.requestPost<boolean>("createNewStickerSet", {
       user_id: userId.toString(),
       name,
       title,
       stickers: stickers.toString(),
       sticker_type,
-    })) as { data: boolean; err: false } | { data: TelegramError; err: true };
-
-    return res;
+    });
   }
   async uploadStickerFile(
     userId: string,
     sticker: Blob,
     sticker_format: "static" | "animated" | "video" = "static"
   ) {
-    const res = (await this.requestPost(
-      "uploadStickerFile",
-      {
-        user_id: userId,
-        sticker,
-        sticker_format,
-      },
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "form/date",
-        },
-      }
-    )) as { data: { result: TelegramFile }; err: boolean };
-    if (!res.err) return res.data.result;
-
-    return null;
+    return this.requestPost<TelegramFile>("uploadStickerFile", {
+      user_id: userId,
+      sticker,
+      sticker_format,
+    });
   }
+  /**
+   *
+   * @param userId
+   * @param name
+   * @param sticker Input_sticker parsed object
+   * @returns
+   */
   async addStickerToSet(userId: string, name: string, sticker: string) {
-    const res = (await this.request("addStickerToSet", {
+    const body = {
       user_id: userId,
       name,
       sticker,
-    })) as { data: boolean; err: boolean };
-    if (!res.err) return res.data;
+    };
 
-    console.log(res);
-
-    return null;
+    return this.request<boolean>("addStickerToSet", body);
   }
   async deleteStickerFromSet(fileId: string) {
-    const res = (await this.request("deleteStickerFromSet", {
+    return this.request<boolean>("deleteStickerFromSet", {
       sticker: fileId,
-    })) as { data: boolean; err: boolean };
-    if (!res.err) return res.data;
-
-    return null;
+    });
   }
   async replaceStickerInSet(
     userId: string,
@@ -408,39 +360,36 @@ export default class TelegramBot extends EventEmitter {
     oldFileId: string,
     sticker: InputSticker
   ) {
-    const res = (await this.request("replaceStickerInSet", {
+    return this.request<boolean>("replaceStickerInSet", {
       user_id: userId,
       name,
       old_sticker: oldFileId,
       sticker: JSON.stringify(sticker),
-    })) as { data: boolean; err: boolean };
-    if (!res.err) return res.data;
-
-    console.log(res);
-
-    return null;
+    });
   }
   async deleteStickerSet(name: string) {
-    const res = (await this.request("deleteStickerSet", {
+    return this.request<boolean>("deleteStickerSet", {
       name,
-    })) as { data: boolean; err: boolean };
-    if (!res.err) return res.data;
-
-    return null;
+    });
   }
   async setStickerSetTitle(name: string, title: string) {
-    const res = (await this.request("setStickerSetTitle", {
+    const res = await this.request("setStickerSetTitle", {
       name,
       title,
-    })) as { data: boolean; err: boolean };
+    });
 
-    if (!res.err) return res.data;
-    return null;
+    return res;
   }
-  private async request(
-    method: methods,
+  async getChat(id: string | number) {
+    const res = await this.request<TelegramChatFullInfo>("getChat", {
+      chat_id: id,
+    });
+    return res;
+  }
+  async request<T extends TelegramResponse<T> | any>(
+    method: AvailableMethodsGet,
     params?: { [key: string]: any }
-  ): Promise<{ data: any; err: boolean }> | undefined {
+  ): Promise<TelegramResponse<T> | null> {
     let link = `https://api.telegram.org/bot${this.token}/${method}`;
 
     if (params) {
@@ -458,22 +407,16 @@ export default class TelegramBot extends EventEmitter {
 
     try {
       const res = await axios.get(link);
-      if (res && res.data.ok) return { data: res.data.result, err: false };
-      return { ...res, err: true };
+
+      return res.data;
     } catch (e) {
-      if (e.status < 200 || e.status > 299) {
-        if (e.status === 409) return { err: true, ...e };
-        // console.error({ err: true, ...e });
-        return { err: true, ...e };
-      }
-      return { err: true, ...e };
+      return e.response.data;
     }
   }
-  private async requestPost(
-    method: methodsPost,
-    body: { [key: string]: any },
-    config: AxiosRequestConfig = {}
-  ) {
+  private async requestPost<T extends TelegramResponse<T> | any>(
+    method: AvalableMethodsPost,
+    body: { [key: string]: any }
+  ): Promise<TelegramResponse<T> | null> {
     const link = `https://api.telegram.org/bot${this.token}/${method}`;
     const form = new FormData();
     Object.entries(body).forEach(([n, e]) => {
@@ -485,19 +428,14 @@ export default class TelegramBot extends EventEmitter {
     });
 
     try {
-      const res = (await axios.postForm(link, form)) as TelegramResponse & {
-        err: boolean;
-      };
-      if (!res.err && res.data.ok) return res;
-      return { ...res, err: true };
+      const res: any = await axios.postForm(link, form);
+
+      return res.data;
     } catch (e) {
-      if (e.status < 200 || e.status > 299) {
-        if (e.status === 409) return null;
-      }
-      return { err: true, data: e.response.data };
+      return e.response.data;
     }
   }
-  private authorFabric(user: User, message: TelegramMessage): BotUser & User {
+  private authorFabric(user: TelegramUser): BotUser & TelegramUser {
     return {
       ...user,
       reply: (text: string) => {
@@ -514,45 +452,31 @@ export default class TelegramBot extends EventEmitter {
       },
     };
   }
-  private messageFabric(message: TelegramMessage): BotMessage {
-    const rawMsg: Partial<BotMessage> = {
-      message: {
-        ...message,
-        text: message.text,
-      } as BotTelegramMessage,
+  messageFabric(message: TelegramMessage): TelegramMessageParsed {
+    const rawMsg: Partial<TelegramMessageParsed> = {
+      ...message,
       reply: (text: string, rest: { [key: string]: string } = {}) => {
         this.sendMessage(message.from.id, text, rest);
         return this.messageFabric(message);
       },
     };
 
-    rawMsg.message.from = this.authorFabric(
-      rawMsg.message.from as User,
-      rawMsg.message
-    );
-    rawMsg.message.edit = async (
-      text: string,
-      options: TelegramSendMessage
-    ) => {
+    rawMsg.from = this.authorFabric(rawMsg.from as TelegramUser);
+    rawMsg.edit = async (text: string, options: TelegramSendMessage) => {
       await this.editMessageText(
         text,
-        rawMsg.message.message_id,
-        rawMsg.message.chat.id,
+        rawMsg.message_id,
+        rawMsg.chat.id,
         options
       );
     };
-    rawMsg.message.delete = async () =>
-      this.deleteMessage(rawMsg.message.chat.id, rawMsg.message.message_id)
-        ? true
-        : false;
-    if (rawMsg.message.chat.type) {
-      rawMsg.message.chat = this.authorFabric(
-        rawMsg.message.chat as any,
-        rawMsg.message
-      ) as any;
+    rawMsg.delete = async () =>
+      this.deleteMessage(rawMsg.chat.id, rawMsg.message_id) ? true : false;
+    if (rawMsg.chat.type) {
+      rawMsg.chat = this.authorFabric(rawMsg.chat as any) as any;
     }
 
-    return rawMsg as BotMessage;
+    return rawMsg as TelegramMessageParsed;
   }
 }
 

@@ -1,4 +1,4 @@
-type User = {
+type TelegramUser = {
   id: number;
 
   first_name: string;
@@ -7,14 +7,14 @@ type User = {
 
   language_code: string;
 
-  isBot?: boolean;
-  isPremium?: boolean;
+  is_bot?: boolean;
+  is_premium?: boolean;
 };
-type Chat =
+type TelegramChat =
   | {
       id: number;
       type: "group" | "supergroup" | "channel";
-      title: string;
+      title: stirng;
       is_forum: boolean;
     }
   | {
@@ -24,17 +24,42 @@ type Chat =
       last_name?: string;
       username?: string;
     };
+type TelegramChatFullInfo =
+  | {
+      id: number;
+      type: "group" | "supergroup" | "channel";
+      title: stirng;
+      is_forum: boolean;
+    }
+  | {
+      id: number;
+      type: "private";
+      first_name?: string;
+      last_name?: string;
+      username?: string;
+      birthdate: {
+        day: number;
+        month: number;
+        year?: number;
+      };
+      active_usernames?: string[];
+      bio?: string;
+      personal_chat?: {
+        username?: string;
+        title?: string;
+      };
+    };
 type TelegramMessage = {
   message_id: number;
 
   from: User;
-  chat: Chat;
+  chat: TelegramChat;
 
   date: number;
   text?: string;
 
   animation?: TelegramAnimation;
-  document?: Document;
+  document?: TelegramDocument;
   entities?: TelegramEntitiy[];
   caption?: string;
 
@@ -44,9 +69,15 @@ type TelegramMessage = {
   photo?: PhotoSize[];
   video?: Video;
 };
+type TelegramGetUpdatesResponse = {
+  update_id: number;
 
+  message?: TelegramMessage;
+  callback_query?: CallbackQuery;
+  edited_message?: TelegramMessage;
+}[];
 type StickerType = "regular" | "mask" | "custom_emoji";
-type Sticker = {
+type TelegramSticker = {
   file_id: string;
   file_unique_id: string;
 
@@ -59,8 +90,8 @@ type Sticker = {
   is_video: boolean;
 
   thumbnail?: TelegramFile;
-  emoji?: String;
-  set_name?: String;
+  emoji?: string;
+  set_name?: string;
 
   custom_emoji_id?: string;
   file_size?: number;
@@ -71,22 +102,9 @@ interface TelegramStickerSet {
 
   sticker_type: StickerType;
 
-  stickers: Sticker[];
+  stickers: TelegramSticker[];
   thumbnail?: PhotoSize;
 }
-type BotTelegramMessage = TelegramMessage & {
-  from: User & BotUser;
-  chat: Chat & BotChat;
-  delete: () => Promise<boolean>;
-  edit: (
-    text: string,
-    replyMarkup?: {
-      reply_markup: {
-        inline_keyboard?: TelegramButton[][];
-      };
-    }
-  ) => void;
-};
 interface PhotoSize {
   file_id: string;
   file_unique_id: string;
@@ -122,7 +140,7 @@ interface TelegramAnimation {
   mime_type?: string;
   file_size?: number;
 }
-interface Document {
+interface TelegramDocument {
   file_id: string;
   file_unique_id: string;
 
@@ -142,7 +160,7 @@ type CallbackQuery = {
   id: string;
 
   from: User;
-  message?: BotTelegramMessage;
+  message?: TelegramMessage;
 
   inline_message_id?: string;
   chat_instance: string;
@@ -185,16 +203,16 @@ interface TelegramSendPhoto {
     quote?: string;
   };
 }
-
-type TelegramResponse = {
-  data: {
-    ok: boolean;
-    result: { [key: string]: any };
-    error_code?: number;
-    description?: string;
-  };
-};
-
+type TelegramResponse<T = any> =
+  | {
+      ok: true;
+      result: T;
+    }
+  | {
+      ok: false;
+      result: T;
+      description?: string;
+    };
 type TelegramResponseUpdate = TelegramResponse & {
   data: {
     result: (
@@ -212,13 +230,13 @@ type TelegramResponseUpdate = TelegramResponse & {
 type TelegramUpdate =
   | {
       type: "message";
-      message: BotMessage;
+      message: TelegramMessageParsed;
     }
   | {
       type: "callback_query";
       callback_query: CallbackQuery;
     };
-type methods =
+type AvailableMethodsGet =
   | "getMe"
   | "getUpdates"
   | "sendMessage"
@@ -235,9 +253,10 @@ type methods =
   | "deleteStickerFromSet"
   | "deleteStickerSet"
   | "editMessageReplyMarkup"
-  | "setStickerSetTitle";
+  | "setStickerSetTitle"
+  | "getChat";
 
-type methodsPost =
+type AvalableMethodsPost =
   | "uploadStickerFile"
   | "createNewStickerSet"
   | "sendPhoto"
@@ -266,10 +285,22 @@ interface InputSticker {
   emoji_list: string[];
 }
 
-interface BotMessage {
-  message: BotTelegramMessage;
-  reply: (text: string, rest?: TelegramSendMessage) => BotMessage;
-}
+type BotTelegramMessage = TelegramMessage & {
+  from: TelegramUser & BotUser;
+  chat: Chat & BotChat;
+  delete: () => Promise<boolean>;
+  edit: (
+    text: string,
+    replyMarkup?: {
+      reply_markup: {
+        inline_keyboard?: TelegramButton[][];
+      };
+    }
+  ) => void;
+};
+type TelegramMessageParsed = BotTelegramMessage & {
+  reply: (text: string, rest?: TelegramSendMessage) => TelegramMessageParsed;
+};
 interface BotUser {
   reply: (text: string, rest?: TelegramSendMessage) => any;
   write: (text: string, rest?: TelegramSendMessage) => any;
@@ -285,6 +316,7 @@ interface ReplyMarkup {
   inline_keyboard: TelegramButton[][];
 }
 
+// Bodies for requesting. GET/POST.
 interface ICreateNewStickerSet {
   userId: string;
   name: string;
@@ -297,20 +329,11 @@ interface IAddStickerToSet {
   name: string;
   sticker: string;
 }
-type TelegramGetUpdatesResponse = {
-  update_id: number;
-
-  message?: TelegramMessage;
-  callback_query?: CallbackQuery;
-  edited_message?: TelegramMessage;
-}[];
-
 interface TelegramError {
   ok: false;
-  error_code: number;
-  description: string;
+  error_code?: number;
+  description?: string;
 }
-
 enum messageEffectId {
   "fire" = "5104841245755180586", //'🔥'
   "like" = "5107584321108051014", //'👍'

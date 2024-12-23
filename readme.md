@@ -1,4 +1,4 @@
-# MigGram v0.0.1
+# MigGram v0.0.2
 Ulta tiny library for vital interaction with Telegram API. This library is pretty good for very simple bots or for beginners.
 Works fine either with JavaScript or TypeScript.
 
