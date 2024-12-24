@@ -63,6 +63,11 @@ declare module "miggram" {
       options: TelegramSendMessage
     ): Out<TelegramMessage>;
     deleteMessage(chatId: number, messageId: number): Out<boolean>;
+    /**
+     * 
+     * @param id {number} id of the chat/user. Provide only ID, don't trust Telegram Docs. Returns the chat on success.
+     */
+    getChat(id: number): Chat
   }
   /**
    * Generates InlineKeyboard that used for Telegram.
@@ -87,7 +92,7 @@ type Cmd = { cmd: string; args: string[] };
 type EventRes = {
   ready: (out: User) => void;
   update: (msg: BotMessage) => void;
-  command: (cmd: { msg: BotMessage; ext: Cmd }) => void;
+  command: (cmd: BotMessage & Cmd) => void;
   callback: (cb: CallbackQuery & { args: string[] }) => void;
 };
 type EventSwitcher<T extends keyof EventRes> = EventRes[T];
