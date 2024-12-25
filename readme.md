@@ -24,6 +24,23 @@ tg.on("update", (msg) => {
 });
 ```
 
+## InlineKeybaord generator
+```js
+// Goes from the same path, but not default
+import {InlineKeyboardGenerator} from "miggram";
+const rm = new InlineKeyboardGenerator()
+  .addBtn("Touch me", "callback_event") // add new button.
+  .newRow() // create new row and turn next buttons into.
+  .rm() // get fully prepared rest content for the message.
+
+// And proceed by adding *rm* to the rest.
+bot.sendMessage(msg.from.id, "Let interactive", rm);
+// By the way, rm isn't sealed, so you can roughly add there more payload like message_effect_id.
+```
+
+## Docs
+[Read docs](./docs.md)
+
 ## Additional info
 * TelegramBot class is only implementation of EventEmitter.
 * `update` ignores commads.

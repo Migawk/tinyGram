@@ -95,7 +95,7 @@ export default class TelegramBot extends EventEmitter {
   /**
    * Get information about the bot. Shoots at least once for `ready`-emmit.
    */
-  getMe() {
+  async getMe() {
     return this.request("getMe");
   }
   /**
@@ -380,7 +380,7 @@ export default class TelegramBot extends EventEmitter {
 
     return res;
   }
-  async getChat(id: string | number) {
+  async getChat(id: number) {
     const res = await this.request<TelegramChatFullInfo>("getChat", {
       chat_id: id,
     });
