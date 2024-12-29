@@ -48,3 +48,9 @@ bot.sendMessage(msg.from.id, "Let interactive", rm);
 * Most of types is described  and you can follow them.
 
 [Official Telegram API docs](https://core.telegram.org/bots/api#inputsticker)
+
+
+## Last edits
+### 0.0.3
+Added payment: `sendInvoice`, `answerPreCheckoutQuery`.
+Added event for handling payment: `checkout`

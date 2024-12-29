@@ -68,6 +68,8 @@ declare module "miggram" {
      * @param id {number} id of the chat/user. Provide only ID, don't trust Telegram Docs. Returns the chat on success.
      */
     getChat(id: number): Chat
+    sendInvoice(chatId: number, title: string, description: string, payload: string, currency: string, providerToken: string, prices: LabelPrice[]): TelegramMessage
+    answerPreCheckoutQuery<isOk extends boolean>(preCheckoutQueryId: string, ok: isOk, errorMessage: isOk extends false ? string : undefined): Promise<boolean>
   }
   /**
    * Generates InlineKeyboard that used for Telegram.
@@ -94,6 +96,7 @@ type EventRes = {
   update: (msg: BotMessage) => void;
   command: (cmd: BotMessage & Cmd) => void;
   callback: (cb: CallbackQuery & { args: string[] }) => void;
+  checkout: (query: PreCheckoutQuery) => void;
 };
 type EventSwitcher<T extends keyof EventRes> = EventRes[T];
 type EventProps<T extends keyof EventRes> = EventSwitcher<T>;
@@ -417,4 +420,17 @@ export enum messageEffectId {
   "heart" = "5044134455711629726", //'❤️'
   "surprise" = "5046509860389126442", //'🎉'
   "poop" = "5046589136895476101", //'💩'
+}
+
+type LabelPrice = {
+  label: string
+  amount: number
+}
+
+type PreCheckoutQuery = {
+  id: string;
+  from: User;
+  currency: "USD" | "EUR";
+  total_amount: number;
+  invoice_payload: string;
 }

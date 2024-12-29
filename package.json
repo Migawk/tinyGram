@@ -1,6 +1,6 @@
 {
   "name": "miggram",
-  "version": "0.0.2f",
+  "version": "0.0.3",
   "type": "module",
   "description": "A tiny library for telegram. Written in TypeScript. Contains a very needed types and very helpful functional.",
   "main": "dist/index.js",

@@ -61,30 +61,41 @@ export default class TelegramBot extends EventEmitter {
   }
   async check() {
     const result = await this.getUpdate(true);
+
     if (result) {
-      if (result.type === "message") {
-        const msg = this.messageFabric(result);
+      switch (result.type) {
+        case "message": {
+          const msg = this.messageFabric(result);
 
-        if (
-          msg.entities &&
-          msg.entities.findIndex((ent) => ent.type === "bot_command") !== -1
-        ) {
-          const lMsg = msg.text.split(" ");
-          const extension = { cmd: lMsg[0].slice(1), args: lMsg.slice(1) };
-          this.emit("command", { ...msg, ...extension });
-        } else {
-          this.emit("update", msg);
+          if (
+            msg.entities &&
+            msg.entities.findIndex((ent) => ent.type === "bot_command") !== -1
+          ) {
+            const lMsg = msg.text.split(" ");
+            const extension = { cmd: lMsg[0].slice(1), args: lMsg.slice(1) };
+
+            this.emit("command", { ...msg, ...extension });
+          } else {
+            this.emit("update", msg);
+          }
+          break;
         }
-      } else if (result.type === "callback_query") {
-        let args: string[] = [];
+        case "callback_query": {
+          let args: string[] = [];
 
-        if (result.callback_query.data.indexOf("_") !== -1) {
-          args = result.callback_query.data.split("_");
+          if (result.callback_query.data.indexOf("_") !== -1) {
+            args = result.callback_query.data.split("_");
 
-          args.shift();
+            args.shift();
+          }
+
+          this.emit("callback", { ...result.callback_query, args });
+          break;
         }
-
-        this.emit("callback", { ...result.callback_query, args });
+        case "checkoutQuery": {
+          this.emit("checkout", result.checkoutQuery);
+          break;
+        }
       }
     }
 
@@ -102,7 +113,7 @@ export default class TelegramBot extends EventEmitter {
    *
    * @param offset send with offset?(Just makes one more request that removes the last message from the telegram server)
    */
-  async getUpdate(offset: boolean = false) {
+  async getUpdate(offset: boolean = false): Promise<null | TelegramUpdate> {
     const response = await this.request<TelegramGetUpdatesResponse>(
       "getUpdates"
     );
@@ -135,6 +146,11 @@ export default class TelegramBot extends EventEmitter {
       callback_query.message = this.messageFabric(callback_query.message);
 
       return { type: "callback_query", callback_query };
+    } else if ("pre_checkout_query" in lastUpdate) {
+      const { pre_checkout_query: checkoutQuery } = lastUpdate;
+      checkoutQuery.from = this.authorFabric(checkoutQuery.from);
+
+      return { type: "checkoutQuery", checkoutQuery };
     }
   }
   /**
@@ -385,6 +401,27 @@ export default class TelegramBot extends EventEmitter {
       chat_id: id,
     });
     return res;
+  }
+  async sendInvoice(chatId: number, title: string, description: string, payload: string, currency: string, providerToken: string, prices: LabelPrice[]) {
+    const res = this.request<TelegramMessage>("sendInvoice", {
+      chat_id: chatId,
+      title,
+      description,
+      payload,
+      currency,
+      provider_token: providerToken,
+      prices: JSON.stringify(prices)
+    });
+    return res;
+  }
+  async answerPreCheckoutQuery<T extends boolean>(preCheckoutQueryId: string, ok: T, errorMessage: T extends true ? string : undefined) {
+    const body: any = {
+      pre_checkout_query_id: preCheckoutQueryId,
+      ok
+    };
+    if (!ok) body.error_message = errorMessage;
+
+    return this.request<boolean>("answerPreCheckoutQuery", body);
   }
   async request<T extends TelegramResponse<T> | any>(
     method: AvailableMethodsGet,

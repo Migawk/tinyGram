@@ -12,43 +12,43 @@ type TelegramUser = {
 };
 type TelegramChat =
   | {
-      id: number;
-      type: "group" | "supergroup" | "channel";
-      title: stirng;
-      is_forum: boolean;
-    }
+    id: number;
+    type: "group" | "supergroup" | "channel";
+    title: stirng;
+    is_forum: boolean;
+  }
   | {
-      id: number;
-      type: "private";
-      first_name?: string;
-      last_name?: string;
-      username?: string;
-    };
+    id: number;
+    type: "private";
+    first_name?: string;
+    last_name?: string;
+    username?: string;
+  };
 type TelegramChatFullInfo =
   | {
-      id: number;
-      type: "group" | "supergroup" | "channel";
-      title: stirng;
-      is_forum: boolean;
-    }
+    id: number;
+    type: "group" | "supergroup" | "channel";
+    title: stirng;
+    is_forum: boolean;
+  }
   | {
-      id: number;
-      type: "private";
-      first_name?: string;
-      last_name?: string;
-      username?: string;
-      birthdate: {
-        day: number;
-        month: number;
-        year?: number;
-      };
-      active_usernames?: string[];
-      bio?: string;
-      personal_chat?: {
-        username?: string;
-        title?: string;
-      };
+    id: number;
+    type: "private";
+    first_name?: string;
+    last_name?: string;
+    username?: string;
+    birthdate: {
+      day: number;
+      month: number;
+      year?: number;
     };
+    active_usernames?: string[];
+    bio?: string;
+    personal_chat?: {
+      username?: string;
+      title?: string;
+    };
+  };
 type TelegramMessage = {
   message_id: number;
 
@@ -75,6 +75,7 @@ type TelegramGetUpdatesResponse = {
   message?: TelegramMessage;
   callback_query?: CallbackQuery;
   edited_message?: TelegramMessage;
+  pre_checkout_query?: PreCheckoutQuery;
 }[];
 type StickerType = "regular" | "mask" | "custom_emoji";
 type TelegramSticker = {
@@ -147,12 +148,12 @@ interface TelegramDocument {
   file_name?: string;
   file_size?: string;
   mime_type?:
-    | "image/jpeg"
-    | "image/png"
-    | "image/gif"
-    | "image/bmp"
-    | "image/webp"
-    | string;
+  | "image/jpeg"
+  | "image/png"
+  | "image/gif"
+  | "image/bmp"
+  | "image/webp"
+  | string;
 
   thumbnail?: PhotoSize;
 }
@@ -205,37 +206,42 @@ interface TelegramSendPhoto {
 }
 type TelegramResponse<T = any> =
   | {
-      ok: true;
-      result: T;
-    }
+    ok: true;
+    result: T;
+  }
   | {
-      ok: false;
-      result: T;
-      description?: string;
-    };
+    ok: false;
+    result: T;
+    description?: string;
+  };
 type TelegramResponseUpdate = TelegramResponse & {
   data: {
-    result: (
+    result: { update_id: number } & (
       | {
-          update_id: number;
-          message?: TelegramMessage;
-        }
+        message: TelegramMessage;
+      }
       | {
-          update_id: number;
-          callback_query: CallbackQuery;
-        }
+        callback_query: CallbackQuery;
+      }
+      | {
+        checkoutQuery: PreCheckoutQuery;
+      }
     )[];
   };
 };
+
 type TelegramUpdate =
+  {
+    type: "message";
+  } & TelegramMessageParsed
   | {
-      type: "message";
-      message: TelegramMessageParsed;
-    }
+    type: "callback_query";
+    callback_query: CallbackQuery;
+  }
   | {
-      type: "callback_query";
-      callback_query: CallbackQuery;
-    };
+    type: "checkoutQuery";
+    checkoutQuery: PreCheckoutQuery
+  };
 type AvailableMethodsGet =
   | "getMe"
   | "getUpdates"
@@ -254,7 +260,9 @@ type AvailableMethodsGet =
   | "deleteStickerSet"
   | "editMessageReplyMarkup"
   | "setStickerSetTitle"
-  | "getChat";
+  | "getChat"
+  | "sendInvoice"
+  | "answerPreCheckoutQuery";
 
 type AvalableMethodsPost =
   | "uploadStickerFile"
@@ -263,13 +271,13 @@ type AvalableMethodsPost =
   | "sendDocument";
 type TelegramEntitiy = {
   type:
-    | "mention"
-    | "hashtag"
-    | "cashtag"
-    | "bot_command"
-    | "url"
-    | "email"
-    | "phone_number";
+  | "mention"
+  | "hashtag"
+  | "cashtag"
+  | "bot_command"
+  | "url"
+  | "email"
+  | "phone_number";
   offset: number;
   length: number;
 };
@@ -341,4 +349,16 @@ enum messageEffectId {
   "heart" = "5044134455711629726", //'❤️'
   "surprise" = "5046509860389126442", //'🎉'
   "poop" = "5046589136895476101", //'💩'
+}
+
+type LabelPrice = {
+  label: string
+  amount: number
+}
+type PreCheckoutQuery = {
+  id: string;
+  from: TelegramUser;
+  currency: "USD" | "EUR";
+  total_amount: number;
+  invoice_payload: string;
 }
